@@ -141,3 +141,29 @@ def read_container_rates() -> List[Dict[str, Any]]:
 def is_docker_available() -> bool:
     """Return True if Docker is reachable."""
     return _get_client() is not None
+
+
+def get_network_labels() -> Dict[str, str]:
+    """Return a mapping of Docker network bridge IDs to human readable labels."""
+    labels = {}
+    client = _get_client()
+    if client:
+        try:
+            container_nets: Dict[str, List[str]] = {}
+            for c in client.containers.list():
+                cname = c.name
+                c_networks = c.attrs.get("NetworkSettings", {}).get("Networks", {})
+                for nname, ninfo in c_networks.items():
+                    net_id = ninfo.get("NetworkID", "")[:12]
+                    if net_id:
+                        container_nets.setdefault(net_id, []).append(cname)
+
+            for net in client.networks.list():
+                short_id = net.id[:12]
+                c_list = container_nets.get(short_id, [])
+                c_desc = f" ({', '.join(c_list[:2])})" if c_list else ""
+                labels[f"br-{short_id}"] = f"Docker Net: {net.name}{c_desc}"
+        except Exception as exc:
+            logger.debug("Failed to get Docker network labels: %s", exc)
+    return labels
+

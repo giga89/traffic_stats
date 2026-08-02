@@ -213,18 +213,21 @@ function updateSummaryCards(snapshot) {
 /* ══════════════════════════════════════════
    Interface selector & history chart
 ══════════════════════════════════════════ */
+/* ══════════════════════════════════════════
+   Interface selector & history chart
+══════════════════════════════════════════ */
 function updateIfaceSelector(ifaces) {
   const sel = document.getElementById('iface-select');
+  if (!sel) return;
   const current = sel.value || selectedIface;
   const names = ifaces.map(r => r.iface);
 
-  // Rebuild options safely using DOM API
   sel.replaceChildren();
-  for (const name of names) {
+  for (const r of ifaces) {
     const opt = document.createElement('option');
-    opt.value       = name;
-    opt.textContent = name;
-    if (name === current) opt.selected = true;
+    opt.value = r.iface;
+    opt.textContent = r.label ? `${r.iface} (${r.label})` : r.iface;
+    if (r.iface === current) opt.selected = true;
     sel.appendChild(opt);
   }
 
@@ -258,6 +261,9 @@ function pushMainChartData(ifaces, ts) {
 ══════════════════════════════════════════ */
 function updateTopChart(containers) {
   try {
+    if (!topChart) {
+      initTopChart();
+    }
     if (!topChart || !containers || !containers.length) return;
 
     const hasActiveRate = containers.some(c => (c.rx_rate + c.tx_rate) > 0.1);
@@ -314,7 +320,7 @@ function updateTopChart(containers) {
       ];
     }
 
-    topChart.update('none');
+    topChart.update();
   } catch (e) {
     console.warn('updateTopChart error:', e);
   }
@@ -325,6 +331,7 @@ function updateTopChart(containers) {
 ══════════════════════════════════════════ */
 function updateIfaceTable(ifaces) {
   const tbody = document.getElementById('iface-tbody');
+  if (!tbody) return;
   tbody.replaceChildren();
 
   if (!ifaces.length) {
@@ -341,10 +348,21 @@ function updateIfaceTable(ifaces) {
   for (const r of ifaces) {
     const tr = document.createElement('tr');
 
-    // Interface name
+    // Interface name + label in parentheses
     const tdIface = document.createElement('td');
     tdIface.className = 'cell-iface';
-    tdIface.textContent = r.iface;
+
+    const spanName = document.createElement('span');
+    spanName.className = 'iface-name';
+    spanName.textContent = r.iface;
+    tdIface.appendChild(spanName);
+
+    if (r.label) {
+      const spanLabel = document.createElement('span');
+      spanLabel.className = 'iface-label';
+      spanLabel.textContent = ` (${r.label})`;
+      tdIface.appendChild(spanLabel);
+    }
 
     // RX rate
     const tdRx = document.createElement('td');
@@ -367,7 +385,6 @@ function updateIfaceTable(ifaces) {
     tdTotalTx.textContent = fmtTotal(r.tx_bytes);
 
     tr.append(tdIface, tdRx, tdTx, tdTotalRx, tdTotalTx);
-    tbody.appendChild(tr);
   }
 }
 

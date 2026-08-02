@@ -54,24 +54,20 @@ def _parse_proc_net_dev() -> Dict[str, Tuple[int, int]]:
 def read_interface_rates() -> Dict[str, Dict]:
     """
     Read /proc/net/dev and compute instantaneous RX/TX rates (bytes/s).
-
-    Returns a dict keyed by interface name:
-        {
-          "eth0": {
-            "iface": "eth0",
-            "rx_bytes": 123456,
-            "tx_bytes": 654321,
-            "rx_rate": 1024.5,   # bytes/s since last call
-            "tx_rate": 512.2,
-            "ts": 1720000000.0,
-          },
-          ...
-        }
+    Attaches human-readable owner labels (e.g., Primary LAN, Docker Net: xxx).
     """
     global _prev
     now = time.time()
     raw = _parse_proc_net_dev()
     result: Dict[str, Dict] = {}
+
+    # Fetch Docker network labels if available
+    docker_labels: Dict[str, str] = {}
+    try:
+        from nettracker import docker_stats
+        docker_labels = docker_stats.get_network_labels()
+    except Exception:
+        pass
 
     for iface, (rx, tx) in raw.items():
         prev = _prev.get(iface)
@@ -84,9 +80,28 @@ def read_interface_rates() -> Dict[str, Dict]:
             rx_rate = 0.0
             tx_rate = 0.0
 
+        # Determine human readable owner label
+        label = docker_labels.get(iface, "")
+        if not label:
+            if iface in ("eth0", "eth1", "enp0s3", "end0") or iface.startswith(("eth", "enp", "end", "wlan")):
+                label = "Primary LAN"
+            elif iface == "docker0":
+                label = "Docker Default Bridge"
+            elif iface.startswith("br-"):
+                label = "Docker Network Bridge"
+            elif iface.startswith("veth"):
+                label = "Docker Container Interface"
+            elif iface.startswith(("tailscale", "tun", "wg")):
+                label = "Tailscale / VPN"
+            elif iface == "lo":
+                label = "Loopback"
+            else:
+                label = "Network Interface"
+
         _prev[iface] = (now, rx, tx)
         result[iface] = {
             "iface": iface,
+            "label": label,
             "rx_bytes": rx,
             "tx_bytes": tx,
             "rx_rate": rx_rate,

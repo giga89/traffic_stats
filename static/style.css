@@ -431,6 +431,14 @@ a:hover { opacity: 0.8; }
   color: var(--accent-blue);
 }
 
+.iface-label {
+  font-family: var(--font-body);
+  font-size: 0.72rem;
+  font-weight: 400;
+  color: var(--text-secondary);
+  margin-left: 0.25rem;
+}
+
 .cell-name {
   font-weight: 600;
   color: var(--text-primary);
