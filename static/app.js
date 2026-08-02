@@ -95,68 +95,82 @@ const CHART_DEFAULTS = {
 };
 
 function initMainChart() {
-  const ctx = document.getElementById('main-chart').getContext('2d');
-  mainChart = new Chart(ctx, {
-    type: 'line',
-    data: {
-      labels: [],
-      datasets: [
-        {
-          label: '↓ Download',
-          data: [],
-          borderColor:       'hsl(145,90%,48%)',
-          backgroundColor:   'hsla(145,90%,48%,0.08)',
-          borderWidth: 2,
-          fill: true,
-          tension: 0.4,
-          pointRadius: 0,
-        },
-        {
-          label: '↑ Upload',
-          data: [],
-          borderColor:       'hsl(355,90%,60%)',
-          backgroundColor:   'hsla(355,90%,60%,0.08)',
-          borderWidth: 2,
-          fill: true,
-          tension: 0.4,
-          pointRadius: 0,
-        },
-      ],
-    },
-    options: CHART_DEFAULTS,
-  });
+  try {
+    if (typeof Chart === 'undefined') return;
+    const el = document.getElementById('main-chart');
+    if (!el) return;
+    const ctx = el.getContext('2d');
+    mainChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [
+          {
+            label: '↓ Download',
+            data: [],
+            borderColor:       'hsl(145,90%,48%)',
+            backgroundColor:   'hsla(145,90%,48%,0.08)',
+            borderWidth: 2,
+            fill: true,
+            tension: 0.4,
+            pointRadius: 0,
+          },
+          {
+            label: '↑ Upload',
+            data: [],
+            borderColor:       'hsl(355,90%,60%)',
+            backgroundColor:   'hsla(355,90%,60%,0.08)',
+            borderWidth: 2,
+            fill: true,
+            tension: 0.4,
+            pointRadius: 0,
+          },
+        ],
+      },
+      options: CHART_DEFAULTS,
+    });
+  } catch (e) {
+    console.warn('Main chart init skipped:', e);
+  }
 }
 
 function initTopChart() {
-  const ctx = document.getElementById('top-chart').getContext('2d');
-  topChart = new Chart(ctx, {
-    type: 'bar',
-    data: { labels: [], datasets: [] },
-    options: {
-      ...CHART_DEFAULTS,
-      indexAxis: 'y',
-      plugins: {
-        ...CHART_DEFAULTS.plugins,
-        legend: { display: false },
-        tooltip: {
-          ...CHART_DEFAULTS.plugins.tooltip,
-          callbacks: { label: ctx => ` ${fmtRate(ctx.raw)}` },
+  try {
+    if (typeof Chart === 'undefined') return;
+    const el = document.getElementById('top-chart');
+    if (!el) return;
+    const ctx = el.getContext('2d');
+    topChart = new Chart(ctx, {
+      type: 'bar',
+      data: { labels: [], datasets: [] },
+      options: {
+        ...CHART_DEFAULTS,
+        indexAxis: 'y',
+        plugins: {
+          ...CHART_DEFAULTS.plugins,
+          legend: { display: false },
+          tooltip: {
+            ...CHART_DEFAULTS.plugins.tooltip,
+            callbacks: { label: ctx => ` ${fmtRate(ctx.raw)}` },
+          },
+        },
+        scales: {
+          x: {
+            ...CHART_DEFAULTS.scales.x,
+            ticks: { ...CHART_DEFAULTS.scales.x.ticks, callback: v => fmtRate(v) },
+            beginAtZero: true,
+          },
+          y: {
+            ...CHART_DEFAULTS.scales.y,
+            grid: { display: false },
+            ticks: { color: 'hsl(210,20%,70%)', font: { family: 'Inter', size: 11 } },
+          },
         },
       },
-      scales: {
-        x: {
-          ...CHART_DEFAULTS.scales.x,
-          ticks: { ...CHART_DEFAULTS.scales.x.ticks, callback: v => fmtRate(v) },
-          beginAtZero: true,
-        },
-        y: {
-          ...CHART_DEFAULTS.scales.y,
-          grid: { display: false },
-          ticks: { color: 'hsl(210,20%,70%)', font: { family: 'Inter', size: 11 } },
-        },
-      },
-    },
-  });
+    });
+  } catch (e) {
+    console.warn('Top chart init skipped:', e);
+  }
 }
 
 /* ══════════════════════════════════════════
@@ -521,35 +535,35 @@ function connectWs() {
 }
 
 /* ══════════════════════════════════════════
-   Interface selector change handler
-══════════════════════════════════════════ */
-document.getElementById('iface-select').addEventListener('change', function () {
-  selectedIface = this.value;
-  if (mainChart) {
-    mainChart.data.labels = [];
-    mainChart.data.datasets[0].data = [];
-    mainChart.data.datasets[1].data = [];
-    mainChart.update();
-
-    const titleEl = document.querySelector('#main-content .panel-title');
-    if (titleEl) {
-      const icon = titleEl.querySelector('svg');
-      titleEl.replaceChildren();
-      if (icon) titleEl.appendChild(icon);
-      const txt = document.createTextNode(` Live Traffic — ${this.value}`);
-      titleEl.appendChild(txt);
-    }
-  }
-});
-
-/* ══════════════════════════════════════════
    Initialise
 ══════════════════════════════════════════ */
 document.addEventListener('DOMContentLoaded', () => {
+  fetchSnapshot();
+  startPollingFallback();
   initMainChart();
   initTopChart();
-  fetchSnapshot();
   connectWs();
-  startPollingFallback();
+
+  const sel = document.getElementById('iface-select');
+  if (sel) {
+    sel.addEventListener('change', function () {
+      selectedIface = this.value;
+      if (mainChart) {
+        mainChart.data.labels = [];
+        mainChart.data.datasets[0].data = [];
+        mainChart.data.datasets[1].data = [];
+        mainChart.update();
+
+        const titleEl = document.querySelector('#main-content .panel-title');
+        if (titleEl) {
+          const icon = titleEl.querySelector('svg');
+          titleEl.replaceChildren();
+          if (icon) titleEl.appendChild(icon);
+          const txt = document.createTextNode(` Live Traffic — ${this.value}`);
+          titleEl.appendChild(txt);
+        }
+      }
+    });
+  }
 });
 
