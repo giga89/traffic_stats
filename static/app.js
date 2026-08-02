@@ -148,20 +148,35 @@ function initTopChart() {
         indexAxis: 'y',
         plugins: {
           ...CHART_DEFAULTS.plugins,
-          legend: { display: false },
+          legend: {
+            display: true,
+            position: 'top',
+            labels: { color: 'hsl(210,20%,65%)', font: { family: 'JetBrains Mono', size: 10 }, boxWidth: 10, padding: 12 }
+          },
           tooltip: {
             ...CHART_DEFAULTS.plugins.tooltip,
-            callbacks: { label: ctx => ` ${fmtRate(ctx.raw)}` },
+            callbacks: {
+              label: ctx => {
+                const label = ctx.dataset.label || '';
+                const val = ctx.raw || 0;
+                if (label.includes('Total')) {
+                  return ` ${label}: ${fmtTotal(val)}`;
+                }
+                return ` ${label}: ${fmtRate(val)}`;
+              }
+            },
           },
         },
         scales: {
           x: {
             ...CHART_DEFAULTS.scales.x,
+            stacked: true,
             ticks: { ...CHART_DEFAULTS.scales.x.ticks, callback: v => fmtRate(v) },
             beginAtZero: true,
           },
           y: {
             ...CHART_DEFAULTS.scales.y,
+            stacked: true,
             grid: { display: false },
             ticks: { color: 'hsl(210,20%,70%)', font: { family: 'Inter', size: 11 } },
           },
@@ -242,23 +257,67 @@ function pushMainChartData(ifaces, ts) {
    Top consumers bar chart
 ══════════════════════════════════════════ */
 function updateTopChart(containers) {
-  if (!topChart) return;
-  const top = [...containers]
-    .sort((a, b) => (b.rx_rate + b.tx_rate) - (a.rx_rate + a.tx_rate))
-    .slice(0, 10);
+  try {
+    if (!topChart || !containers || !containers.length) return;
 
-  topChart.data.labels   = top.map(c => c.name);
-  topChart.data.datasets = [
-    {
-      label: '↓ RX',
-      data:  top.map(c => c.rx_rate),
-      backgroundColor: top.map((_, i) => PALETTE[i % PALETTE.length] + 'bb'),
-      borderColor:     top.map((_, i) => PALETTE[i % PALETTE.length]),
-      borderWidth: 1,
-      borderRadius: 4,
-    },
-  ];
-  topChart.update('none');
+    const hasActiveRate = containers.some(c => (c.rx_rate + c.tx_rate) > 0.1);
+
+    const sorted = [...containers].sort((a, b) => {
+      if (hasActiveRate) {
+        return (b.rx_rate + b.tx_rate) - (a.rx_rate + a.tx_rate);
+      }
+      return (b.rx_bytes + b.tx_bytes) - (a.rx_bytes + a.tx_bytes);
+    });
+
+    const top = sorted.slice(0, 8);
+    topChart.data.labels = top.map(c => c.name);
+
+    if (hasActiveRate) {
+      topChart.options.scales.x.ticks.callback = v => fmtRate(v);
+      topChart.data.datasets = [
+        {
+          label: '↓ RX Rate',
+          data: top.map(c => c.rx_rate),
+          backgroundColor: 'hsla(145, 90%, 48%, 0.85)',
+          borderColor: 'hsl(145, 90%, 48%)',
+          borderWidth: 1,
+          borderRadius: 4,
+        },
+        {
+          label: '↑ TX Rate',
+          data: top.map(c => c.tx_rate),
+          backgroundColor: 'hsla(355, 90%, 60%, 0.85)',
+          borderColor: 'hsl(355, 90%, 60%)',
+          borderWidth: 1,
+          borderRadius: 4,
+        },
+      ];
+    } else {
+      topChart.options.scales.x.ticks.callback = v => fmtTotal(v);
+      topChart.data.datasets = [
+        {
+          label: 'Total RX',
+          data: top.map(c => c.rx_bytes),
+          backgroundColor: 'hsla(145, 90%, 48%, 0.65)',
+          borderColor: 'hsl(145, 90%, 48%)',
+          borderWidth: 1,
+          borderRadius: 4,
+        },
+        {
+          label: 'Total TX',
+          data: top.map(c => c.tx_bytes),
+          backgroundColor: 'hsla(355, 90%, 60%, 0.65)',
+          borderColor: 'hsl(355, 90%, 60%)',
+          borderWidth: 1,
+          borderRadius: 4,
+        },
+      ];
+    }
+
+    topChart.update('none');
+  } catch (e) {
+    console.warn('updateTopChart error:', e);
+  }
 }
 
 /* ══════════════════════════════════════════
