@@ -667,6 +667,8 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       }
     });
+  }
+
   const selTop = document.getElementById('top-tf-select');
   if (selTop) {
     selTop.addEventListener('change', function () {
