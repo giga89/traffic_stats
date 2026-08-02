@@ -263,26 +263,46 @@ function pushMainChartData(ifaces, ts) {
 /* ══════════════════════════════════════════
    Top consumers bar chart
 ══════════════════════════════════════════ */
-function updateTopChart(containers) {
+let selectedTopHours = '24';
+
+function updateTopChart(containers, isTotalTraffic = true, labelSuffix = '24h') {
   try {
     if (!topChart) {
       initTopChart();
     }
     if (!topChart || !containers || !containers.length) return;
 
-    const hasActiveRate = containers.some(c => (c.rx_rate + c.tx_rate) > 0.1);
-
     const sorted = [...containers].sort((a, b) => {
-      if (hasActiveRate) {
-        return (b.rx_rate + b.tx_rate) - (a.rx_rate + a.tx_rate);
+      if (isTotalTraffic) {
+        return (b.rx_bytes + b.tx_bytes) - (a.rx_bytes + a.tx_bytes);
       }
-      return (b.rx_bytes + b.tx_bytes) - (a.rx_bytes + a.tx_bytes);
+      return (b.rx_rate + b.tx_rate) - (a.rx_rate + a.tx_rate);
     });
 
     const top = sorted.slice(0, 8);
     topChart.data.labels = top.map(c => c.name);
 
-    if (hasActiveRate) {
+    if (isTotalTraffic) {
+      topChart.options.scales.x.ticks.callback = v => fmtTotal(v);
+      topChart.data.datasets = [
+        {
+          label: `Total Download (${labelSuffix})`,
+          data: top.map(c => c.rx_bytes),
+          backgroundColor: 'hsla(145, 90%, 48%, 0.75)',
+          borderColor: 'hsl(145, 90%, 48%)',
+          borderWidth: 1,
+          borderRadius: 4,
+        },
+        {
+          label: `Total Upload (${labelSuffix})`,
+          data: top.map(c => c.tx_bytes),
+          backgroundColor: 'hsla(355, 90%, 60%, 0.75)',
+          borderColor: 'hsl(355, 90%, 60%)',
+          borderWidth: 1,
+          borderRadius: 4,
+        },
+      ];
+    } else {
       topChart.options.scales.x.ticks.callback = v => fmtRate(v);
       topChart.data.datasets = [
         {
@@ -297,26 +317,6 @@ function updateTopChart(containers) {
           label: '↑ TX Rate',
           data: top.map(c => c.tx_rate),
           backgroundColor: 'hsla(355, 90%, 60%, 0.85)',
-          borderColor: 'hsl(355, 90%, 60%)',
-          borderWidth: 1,
-          borderRadius: 4,
-        },
-      ];
-    } else {
-      topChart.options.scales.x.ticks.callback = v => fmtTotal(v);
-      topChart.data.datasets = [
-        {
-          label: 'Total RX',
-          data: top.map(c => c.rx_bytes),
-          backgroundColor: 'hsla(145, 90%, 48%, 0.65)',
-          borderColor: 'hsl(145, 90%, 48%)',
-          borderWidth: 1,
-          borderRadius: 4,
-        },
-        {
-          label: 'Total TX',
-          data: top.map(c => c.tx_bytes),
-          backgroundColor: 'hsla(355, 90%, 60%, 0.65)',
           borderColor: 'hsl(355, 90%, 60%)',
           borderWidth: 1,
           borderRadius: 4,
@@ -497,6 +497,7 @@ let pollInterval  = null;
 
 function processSnapshot(snap) {
   if (!snap) return;
+  window.lastSnap = snap;
 
   // Update last-update timestamp
   if (snap.ts) {
@@ -522,8 +523,29 @@ function processSnapshot(snap) {
 
   // Container table + top bar chart
   updateContainerTable(snap.containers || [], snap.docker_available);
-  if (snap.containers && snap.containers.length) {
-    updateTopChart(snap.containers);
+
+  if (selectedTopHours === '24') {
+    const list24 = (snap.top_containers_24h && snap.top_containers_24h.length)
+      ? snap.top_containers_24h
+      : snap.containers;
+    updateTopChart(list24 || [], true, '24h');
+  } else if (selectedTopHours === '0') {
+    updateTopChart(snap.containers || [], false, 'instant');
+  } else {
+    fetchTopContainersHistory(selectedTopHours);
+  }
+}
+
+async function fetchTopContainersHistory(hours) {
+  try {
+    const res = await fetch(`/api/top/containers?hours=${hours}`);
+    if (res.ok) {
+      const data = await res.json();
+      const labelSuffix = hours === '1' ? '1h' : (hours === '168' ? '7d' : `${hours}h`);
+      updateTopChart(data.containers || [], true, labelSuffix);
+    }
+  } catch (e) {
+    console.warn('Fetch top containers error:', e);
   }
 }
 
@@ -643,6 +665,28 @@ document.addEventListener('DOMContentLoaded', () => {
           const txt = document.createTextNode(` Live Traffic — ${this.value}`);
           titleEl.appendChild(txt);
         }
+      }
+    });
+  const selTop = document.getElementById('top-tf-select');
+  if (selTop) {
+    selTop.addEventListener('change', function () {
+      selectedTopHours = this.value;
+      const titleEl = document.getElementById('top-panel-title');
+      if (titleEl) {
+        const icon = titleEl.querySelector('svg');
+        titleEl.replaceChildren();
+        if (icon) titleEl.appendChild(icon);
+        const labelMap = { '24': '24h', '1': '1h', '168': '7d', '0': 'Instant' };
+        const txt = document.createTextNode(` Top Consumers (${labelMap[this.value] || '24h'})`);
+        titleEl.appendChild(txt);
+      }
+      if (selectedTopHours === '0') {
+        const snap = window.lastSnap;
+        if (snap && snap.containers) {
+          updateTopChart(snap.containers, false, 'instant');
+        }
+      } else {
+        fetchTopContainersHistory(selectedTopHours);
       }
     });
   }

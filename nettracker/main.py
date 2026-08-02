@@ -96,6 +96,7 @@ async def _ws_broadcast(snapshot: Dict[str, Any]) -> None:
         "ts": snapshot["ts"],
         "interfaces": snapshot["interfaces"],
         "containers": snapshot["containers"],
+        "top_containers_24h": snapshot.get("top_containers_24h", []),
         "docker_available": snapshot["docker_available"],
     })
 
@@ -234,6 +235,20 @@ async def get_container_history(
     return {"container_id": container_id, "hours": hours, "data": data}
 
 
+@app.get("/api/top/containers")
+async def get_top_containers(
+    hours: float = Query(default=24.0, ge=0.1, le=168.0),
+    limit: int = Query(default=10, ge=1, le=50),
+):
+    """
+    Return top network consuming containers over the specified time window (default 24h).
+    Returns accumulated RX and TX bytes.
+    """
+    conn = get_db()
+    data = db.query_top_containers_history(conn, hours=hours, limit=limit)
+    return {"hours": hours, "containers": data}
+
+
 @app.get("/api/status")
 async def get_status():
     """Return service health and configuration."""
@@ -269,6 +284,7 @@ async def websocket_endpoint(ws: WebSocket):
             "ts": snap.get("ts", time.time()),
             "interfaces": snap.get("interfaces", []),
             "containers": snap.get("containers", []),
+            "top_containers_24h": snap.get("top_containers_24h", []),
             "docker_available": snap.get("docker_available", False),
         }, default=str))
 

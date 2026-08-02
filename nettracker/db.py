@@ -177,9 +177,41 @@ def query_latest_container_stats(
     return [dict(r) for r in rows]
 
 
+def query_top_containers_history(
+    conn: sqlite3.Connection,
+    hours: float = 24.0,
+    limit: int = 10,
+) -> List[Dict[str, Any]]:
+    """
+    Return top network consuming containers over the specified time window (default 24 hours).
+    Calculates accumulated RX bytes and TX bytes over the window.
+    """
+    since = time.time() - hours * 3600
+    rows = conn.execute(
+        """
+        SELECT 
+            container_id,
+            name,
+            image,
+            COALESCE(SUM(rx_rate * 2.0), 0) AS rx_bytes,
+            COALESCE(SUM(tx_rate * 2.0), 0) AS tx_bytes,
+            COALESCE(AVG(rx_rate), 0) AS avg_rx_rate,
+            COALESCE(AVG(tx_rate), 0) AS avg_tx_rate
+        FROM container_stats
+        WHERE ts >= ?
+        GROUP BY container_id, name
+        ORDER BY (SUM(rx_rate) + SUM(tx_rate)) DESC
+        LIMIT ?
+        """,
+        (since, limit),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def purge_old_data(conn: sqlite3.Connection, hours: float = 168.0) -> None:
     """Delete records older than N hours to keep the DB size bounded."""
     cutoff = time.time() - hours * 3600
     conn.execute("DELETE FROM interface_stats WHERE ts < ?", (cutoff,))
     conn.execute("DELETE FROM container_stats WHERE ts < ?", (cutoff,))
     conn.commit()
+

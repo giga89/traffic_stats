@@ -126,10 +126,18 @@ async def collection_loop(db_conn) -> None:
             except Exception as exc:
                 logger.error("Docker stats error: %s", exc)
 
+        # --- Query 24h top containers from DB ---
+        top_24h: List[Dict] = []
+        try:
+            top_24h = db.query_top_containers_history(db_conn, hours=24.0, limit=10)
+        except Exception as exc:
+            logger.debug("24h top query error: %s", exc)
+
         # --- Update shared state ---
         snapshot = {
             "interfaces": iface_list,
             "containers": container_list,
+            "top_containers_24h": top_24h,
             "ts": tick_start,
             "docker_available": docker_stats.is_docker_available(),
         }
