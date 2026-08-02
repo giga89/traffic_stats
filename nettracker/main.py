@@ -51,25 +51,7 @@ def get_db():
     return _db_conn
 
 
-# --- Security headers middleware for HTTP requests ---
-@app.middleware("http")
-async def add_security_headers(request: Request, call_next):
-    response = await call_next(request)
-    response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["X-Frame-Options"] = "SAMEORIGIN"
-    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
-    response.headers["Content-Security-Policy"] = (
-        "default-src 'self'; "
-        "script-src 'self' https://cdn.jsdelivr.net; "
-        "style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; "
-        "font-src 'self' https://fonts.gstatic.com; "
-        "img-src 'self' data:; "
-        "connect-src 'self' ws: wss: http: https:; "
-        "object-src 'none'; "
-        "frame-ancestors 'self';"
-    )
-    return response
+
 
 
 # --- WebSocket connection manager ---
@@ -145,6 +127,26 @@ app = FastAPI(
     redoc_url=None,
     lifespan=lifespan,
 )
+
+# Security headers middleware for HTTP requests
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' https://cdn.jsdelivr.net; "
+        "style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; "
+        "font-src 'self' https://fonts.gstatic.com; "
+        "img-src 'self' data:; "
+        "connect-src 'self' ws: wss: http: https:; "
+        "object-src 'none'; "
+        "frame-ancestors 'self';"
+    )
+    return response
 
 # CORS: allow all LAN origins (no authentication; trusted network assumed)
 # TODO(security): Restrict origins to specific LAN subnet if needed.
