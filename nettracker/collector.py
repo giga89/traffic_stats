@@ -119,7 +119,7 @@ async def collection_loop(db_conn) -> None:
             try:
                 container_list = await asyncio.wait_for(
                     _fetch_docker_stats_async(loop),
-                    timeout=max(INTERVAL * 2, 10.0),
+                    timeout=20.0,
                 )
             except asyncio.TimeoutError:
                 logger.warning("Docker stats collection timed out")
