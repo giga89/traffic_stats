@@ -1,0 +1,34 @@
+# ═══════════════════════════════════════════════════════
+#  NetTracker — Docker Compose (optional containerized deploy)
+#  Runs NetTracker itself inside Docker while still monitoring
+#  all other containers on the host via host networking + socket.
+# ═══════════════════════════════════════════════════════
+services:
+  nettracker:
+    build: .
+    container_name: nettracker
+    restart: unless-stopped
+    network_mode: host          # Required to read /proc/net/dev of host interfaces
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro   # Read-only Docker socket
+      - nettracker_data:/data                          # Persistent SQLite storage
+    environment:
+      NETTRACKER_HOST: "0.0.0.0"
+      NETTRACKER_PORT: "7654"
+      NETTRACKER_INTERVAL: "2"
+      NETTRACKER_HISTORY_HOURS: "168"
+      NETTRACKER_DB_PATH: "/data/nettracker.db"
+    # Run as non-root; add to docker group (gid 999 is common, adjust if needed)
+    user: "1000:999"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:7654/api/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    labels:
+      - "com.nettracker.description=Linux Network Traffic Monitor"
+
+volumes:
+  nettracker_data:
+    driver: local

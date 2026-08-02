@@ -1,0 +1,34 @@
+[Unit]
+Description=NetTracker — Linux Network Traffic Monitor
+Documentation=https://github.com/YOUR_USERNAME/traffic_stats
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+User=orangepi
+Group=docker
+WorkingDirectory=/home/orangepi/traffic_stats
+ExecStart=/home/orangepi/traffic_stats/venv/bin/python -m nettracker.main
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=nettracker
+
+# Environment (override via /etc/nettracker.env if needed)
+Environment=NETTRACKER_HOST=0.0.0.0
+Environment=NETTRACKER_PORT=7654
+Environment=NETTRACKER_INTERVAL=2
+Environment=NETTRACKER_HISTORY_HOURS=168
+EnvironmentFile=-/etc/nettracker.env
+
+# Hardening
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths=/home/orangepi/traffic_stats
+ProtectHome=read-only
+
+[Install]
+WantedBy=multi-user.target

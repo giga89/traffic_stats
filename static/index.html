@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NetTracker — Network Monitor</title>
+  <meta name="description" content="Real-time network bandwidth monitoring per Docker container and interface on Linux." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <!--
+    Chart.js loaded from CDN with Subresource Integrity (SRI) for supply-chain security.
+    NOTE(security): Pin to exact version and update SRI hash when upgrading.
+  -->
+  <script
+    src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"
+    integrity="sha384-uyUUFSVuuzz9LnIlVrDPlLaHAJTp0UEeaYLkFp5LvIcHqMTp7IcOdGHa2JBFpHj"
+    crossorigin="anonymous"
+  ></script>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <!-- ═══════════════ HEADER ═══════════════ -->
+  <header id="main-header">
+    <div class="header-inner">
+      <div class="logo">
+        <div class="logo-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+          </svg>
+        </div>
+        <span class="logo-text">NetTracker</span>
+        <span class="logo-badge">LIVE</span>
+      </div>
+      <div class="header-meta">
+        <div id="ws-status" class="ws-indicator ws-connecting" title="WebSocket status">
+          <span class="ws-dot"></span>
+          <span id="ws-label">Connecting…</span>
+        </div>
+        <div class="meta-divider"></div>
+        <div id="last-update" class="meta-item" title="Last data update">–</div>
+        <div class="meta-divider"></div>
+        <div id="docker-badge" class="meta-badge docker-offline" title="Docker status">
+          Docker
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ═══════════════ SUMMARY CARDS ═══════════════ -->
+  <main id="main-content">
+    <section id="summary-cards" class="section">
+      <div class="card glass" id="card-rx">
+        <div class="card-icon rx">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M12 5v14M5 12l7 7 7-7"/>
+          </svg>
+        </div>
+        <div class="card-body">
+          <div class="card-label">Total Download</div>
+          <div class="card-value" id="total-rx">–</div>
+        </div>
+      </div>
+      <div class="card glass" id="card-tx">
+        <div class="card-icon tx">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M12 19V5M5 12l7-7 7 7"/>
+          </svg>
+        </div>
+        <div class="card-body">
+          <div class="card-label">Total Upload</div>
+          <div class="card-value" id="total-tx">–</div>
+        </div>
+      </div>
+      <div class="card glass" id="card-ifaces">
+        <div class="card-icon ifaces">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <rect x="2" y="2" width="20" height="8" rx="2"/>
+            <rect x="2" y="14" width="20" height="8" rx="2"/>
+            <line x1="6" y1="6" x2="6.01" y2="6"/>
+            <line x1="6" y1="18" x2="6.01" y2="18"/>
+          </svg>
+        </div>
+        <div class="card-body">
+          <div class="card-label">Interfaces</div>
+          <div class="card-value" id="ifaces-count">–</div>
+        </div>
+      </div>
+      <div class="card glass" id="card-containers">
+        <div class="card-icon containers">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+            <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+            <line x1="12" y1="22.08" x2="12" y2="12"/>
+          </svg>
+        </div>
+        <div class="card-body">
+          <div class="card-label">Containers</div>
+          <div class="card-value" id="containers-count">–</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════ MAIN CHART ═══════════════ -->
+    <section class="section">
+      <div class="glass panel">
+        <div class="panel-header">
+          <h2 class="panel-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+            Live Traffic — eth0
+          </h2>
+          <div class="panel-controls">
+            <select id="iface-select" class="control-select">
+              <option value="">Loading interfaces…</option>
+            </select>
+          </div>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="main-chart"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══════════════ TWO COLUMNS ═══════════════ -->
+    <div class="two-col">
+
+      <!-- INTERFACES TABLE -->
+      <section class="glass panel">
+        <div class="panel-header">
+          <h2 class="panel-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/></svg>
+            Network Interfaces
+          </h2>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table" id="iface-table">
+            <thead>
+              <tr>
+                <th>Interface</th>
+                <th class="right">↓ Download</th>
+                <th class="right">↑ Upload</th>
+                <th class="right">Total RX</th>
+                <th class="right">Total TX</th>
+              </tr>
+            </thead>
+            <tbody id="iface-tbody">
+              <tr><td colspan="5" class="loading-row">Collecting data…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- TOP CONSUMERS CHART -->
+      <section class="glass panel">
+        <div class="panel-header">
+          <h2 class="panel-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+            Top Consumers
+          </h2>
+        </div>
+        <div class="chart-wrap chart-wrap--bar">
+          <canvas id="top-chart"></canvas>
+        </div>
+      </section>
+    </div>
+
+    <!-- ═══════════════ CONTAINERS TABLE ═══════════════ -->
+    <section class="section">
+      <div class="glass panel">
+        <div class="panel-header">
+          <h2 class="panel-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+            Docker Containers
+          </h2>
+          <div id="container-docker-status" class="panel-badge">–</div>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table" id="container-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Container</th>
+                <th>Image</th>
+                <th class="right">↓ Download</th>
+                <th class="right">↑ Upload</th>
+                <th class="right">Total RX</th>
+                <th class="right">Total TX</th>
+                <th class="right">Activity</th>
+              </tr>
+            </thead>
+            <tbody id="container-tbody">
+              <tr><td colspan="8" class="loading-row">Waiting for Docker stats…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ═══════════════ FOOTER ═══════════════ -->
+  <footer id="main-footer">
+    <span>NetTracker v1.0.0</span>
+    <span class="footer-sep">·</span>
+    <span>7-day history</span>
+    <span class="footer-sep">·</span>
+    <a href="/api/docs" target="_blank" rel="noopener noreferrer">API Docs</a>
+  </footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
