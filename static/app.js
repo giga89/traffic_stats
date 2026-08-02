@@ -144,17 +144,22 @@ function initTopChart() {
       type: 'bar',
       data: { labels: [], datasets: [] },
       options: {
-        ...CHART_DEFAULTS,
+        animation: { duration: 200 },
+        responsive: true,
+        maintainAspectRatio: false,
         indexAxis: 'y',
         plugins: {
-          ...CHART_DEFAULTS.plugins,
           legend: {
             display: true,
             position: 'top',
             labels: { color: 'hsl(210,20%,65%)', font: { family: 'JetBrains Mono', size: 10 }, boxWidth: 10, padding: 12 }
           },
           tooltip: {
-            ...CHART_DEFAULTS.plugins.tooltip,
+            backgroundColor: 'hsla(222,47%,8%,0.95)',
+            titleColor:      'hsl(210,30%,96%)',
+            bodyColor:       'hsl(210,20%,65%)',
+            borderColor:     'hsla(210,60%,60%,0.2)',
+            borderWidth:     1,
             callbacks: {
               label: ctx => {
                 const label = ctx.dataset.label || '';
@@ -169,16 +174,15 @@ function initTopChart() {
         },
         scales: {
           x: {
-            ...CHART_DEFAULTS.scales.x,
             stacked: true,
-            ticks: { ...CHART_DEFAULTS.scales.x.ticks, callback: v => fmtRate(v) },
+            grid: { color: 'hsla(210,20%,50%,0.08)' },
+            ticks: { color: 'hsl(210,15%,40%)', font: { family: 'JetBrains Mono', size: 10 }, callback: v => fmtRate(v) },
             beginAtZero: true,
           },
           y: {
-            ...CHART_DEFAULTS.scales.y,
             stacked: true,
             grid: { display: false },
-            ticks: { color: 'hsl(210,20%,70%)', font: { family: 'Inter', size: 11 } },
+            ticks: { color: 'hsl(210,20%,80%)', font: { family: 'Inter', size: 11, weight: '500' } },
           },
         },
       },
@@ -385,6 +389,7 @@ function updateIfaceTable(ifaces) {
     tdTotalTx.textContent = fmtTotal(r.tx_bytes);
 
     tr.append(tdIface, tdRx, tdTx, tdTotalRx, tdTotalTx);
+    tbody.appendChild(tr);
   }
 }
 
