@@ -51,30 +51,25 @@ def get_db():
     return _db_conn
 
 
-# --- Security headers middleware ---
-class SecurityHeadersMiddleware(BaseHTTPMiddleware):
-    """
-    Inject security headers on every response.
-    Provides XSS protection, clickjacking protection, and content-type sniffing protection.
-    """
-    async def dispatch(self, request: Request, call_next) -> Response:
-        response = await call_next(request)
-        response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "SAMEORIGIN"
-        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
-        # CSP: allow self + Chart.js from CDN with SRI; no unsafe-inline/eval
-        response.headers["Content-Security-Policy"] = (
-            "default-src 'self'; "
-            "script-src 'self' https://cdn.jsdelivr.net; "
-            "style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; "
-            "font-src 'self' https://fonts.gstatic.com; "
-            "img-src 'self' data:; "
-            "connect-src 'self' ws: wss:; "
-            "object-src 'none'; "
-            "frame-ancestors 'self';"
-        )
-        return response
+# --- Security headers middleware for HTTP requests ---
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' https://cdn.jsdelivr.net; "
+        "style-src 'self' https://fonts.googleapis.com 'unsafe-inline'; "
+        "font-src 'self' https://fonts.gstatic.com; "
+        "img-src 'self' data:; "
+        "connect-src 'self' ws: wss: http: https:; "
+        "object-src 'none'; "
+        "frame-ancestors 'self';"
+    )
+    return response
 
 
 # --- WebSocket connection manager ---
@@ -159,7 +154,6 @@ app.add_middleware(
     allow_methods=["GET"],
     allow_headers=["*"],
 )
-app.add_middleware(SecurityHeadersMiddleware)
 
 # Serve static files (dashboard)
 if STATIC_DIR.exists():

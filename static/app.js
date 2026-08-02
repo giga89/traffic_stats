@@ -395,26 +395,98 @@ function updateContainerTable(containers, dockerAvailable) {
 }
 
 /* ══════════════════════════════════════════
+   Snapshot Processing & Data Update
+══════════════════════════════════════════ */
+let isWsConnected = false;
+let pollInterval  = null;
+
+function processSnapshot(snap) {
+  if (!snap) return;
+
+  // Update last-update timestamp
+  if (snap.ts) {
+    document.getElementById('last-update').textContent = fmtTime(snap.ts);
+  }
+
+  // Docker badge
+  const dockerBadge = document.getElementById('docker-badge');
+  if (dockerBadge) {
+    dockerBadge.textContent = snap.docker_available ? 'Docker ●' : 'Docker ○';
+    dockerBadge.className   = `meta-badge ${snap.docker_available ? 'docker-online' : 'docker-offline'}`;
+  }
+
+  // Summary cards
+  updateSummaryCards(snap);
+
+  // Interface selector + main line chart
+  if (snap.interfaces && snap.interfaces.length) {
+    updateIfaceSelector(snap.interfaces);
+    pushMainChartData(snap.interfaces, snap.ts || Date.now() / 1000);
+    updateIfaceTable(snap.interfaces);
+  }
+
+  // Container table + top bar chart
+  updateContainerTable(snap.containers || [], snap.docker_available);
+  if (snap.containers && snap.containers.length) {
+    updateTopChart(snap.containers);
+  }
+}
+
+async function fetchSnapshot() {
+  try {
+    const res = await fetch('/api/snapshot');
+    if (res.ok) {
+      const snap = await res.json();
+      processSnapshot(snap);
+      if (!isWsConnected) {
+        setWsStatus('connected', 'Live (HTTP)');
+      }
+    }
+  } catch (err) {
+    if (!isWsConnected) {
+      setWsStatus('disconnected', 'Offline');
+    }
+  }
+}
+
+function startPollingFallback() {
+  if (!pollInterval) {
+    pollInterval = setInterval(() => {
+      if (!isWsConnected) {
+        fetchSnapshot();
+      }
+    }, 2000);
+  }
+}
+
+/* ══════════════════════════════════════════
    WebSocket management
 ══════════════════════════════════════════ */
 function setWsStatus(state, label) {
   const el = document.getElementById('ws-status');
+  if (!el) return;
   el.className = `ws-indicator ws-${state}`;
-  // Safe: label is a hardcoded string, not user input
   document.getElementById('ws-label').textContent = label;
 }
 
 function connectWs() {
   clearTimeout(wsReconnect);
 
-  // Construct WebSocket URL from current origin (same-origin, no user input)
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
   const url   = `${proto}://${location.host}/ws`;
 
   setWsStatus('connecting', 'Connecting…');
-  ws = new WebSocket(url);
+
+  try {
+    ws = new WebSocket(url);
+  } catch (e) {
+    isWsConnected = false;
+    startPollingFallback();
+    return;
+  }
 
   ws.addEventListener('open', () => {
+    isWsConnected = true;
     setWsStatus('connected', 'Live');
   });
 
@@ -429,40 +501,22 @@ function connectWs() {
     if (data.type === 'ping') return;
     if (data.type !== 'update') return;
 
-    const snap = data;
-
-    // Update last-update timestamp (safe: formatted from number)
-    document.getElementById('last-update').textContent = fmtTime(snap.ts);
-
-    // Docker badge
-    const dockerBadge = document.getElementById('docker-badge');
-    dockerBadge.textContent  = snap.docker_available ? 'Docker ●' : 'Docker ○';
-    dockerBadge.className    = `meta-badge ${snap.docker_available ? 'docker-online' : 'docker-offline'}`;
-
-    // Summary cards
-    updateSummaryCards(snap);
-
-    // Interface selector + main line chart
-    if (snap.interfaces && snap.interfaces.length) {
-      updateIfaceSelector(snap.interfaces);
-      pushMainChartData(snap.interfaces, snap.ts);
-      updateIfaceTable(snap.interfaces);
-    }
-
-    // Container table + top bar chart
-    updateContainerTable(snap.containers || [], snap.docker_available);
-    if (snap.containers && snap.containers.length) {
-      updateTopChart(snap.containers);
-    }
+    isWsConnected = true;
+    setWsStatus('connected', 'Live');
+    processSnapshot(data);
   });
 
   ws.addEventListener('close', () => {
-    setWsStatus('disconnected', 'Disconnected');
+    isWsConnected = false;
+    setWsStatus('connecting', 'Reconnecting…');
+    startPollingFallback();
     wsReconnect = setTimeout(connectWs, WS_RECONNECT_DELAY_MS);
   });
 
   ws.addEventListener('error', () => {
-    ws.close();
+    isWsConnected = false;
+    startPollingFallback();
+    try { ws.close(); } catch (e) {}
   });
 }
 
@@ -471,17 +525,14 @@ function connectWs() {
 ══════════════════════════════════════════ */
 document.getElementById('iface-select').addEventListener('change', function () {
   selectedIface = this.value;
-  // Clear main chart data on interface switch
   if (mainChart) {
     mainChart.data.labels = [];
     mainChart.data.datasets[0].data = [];
     mainChart.data.datasets[1].data = [];
     mainChart.update();
 
-    // Update chart title safely
     const titleEl = document.querySelector('#main-content .panel-title');
     if (titleEl) {
-      // Rebuild title: icon + text, both safe
       const icon = titleEl.querySelector('svg');
       titleEl.replaceChildren();
       if (icon) titleEl.appendChild(icon);
@@ -497,5 +548,8 @@ document.getElementById('iface-select').addEventListener('change', function () {
 document.addEventListener('DOMContentLoaded', () => {
   initMainChart();
   initTopChart();
+  fetchSnapshot();
   connectWs();
+  startPollingFallback();
 });
+
